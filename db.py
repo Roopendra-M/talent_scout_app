@@ -31,6 +31,7 @@ def init_db():
             q_number INTEGER,
             question TEXT,
             answer TEXT,
+            sentiment TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -52,13 +53,13 @@ def add_candidate(cand) -> None:
     conn.commit()
     conn.close()
 
-def save_answer(email: str, q_number: int, question: str, answer: str):
+def save_answer(email: str, q_number: int, question: str, answer: str, sentiment: str = "Neutral"):
     conn = _connect()
     c = conn.cursor()
     c.execute("""
-        INSERT INTO answers (candidate_email, q_number, question, answer)
-        VALUES (?,?,?,?)
-    """, (email, q_number, question, answer))
+        INSERT INTO answers (candidate_email, q_number, question, answer, sentiment)
+        VALUES (?,?,?,?,?)
+    """, (email, q_number, question, answer, sentiment))
     conn.commit()
     conn.close()
 
