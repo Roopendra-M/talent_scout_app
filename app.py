@@ -5,12 +5,28 @@ from utils import (
     validate_email, validate_phone, validate_years, sanitize_list,
     EXIT_KEYWORDS
 )
-from llm import generate_questions
+from llm import generate_questions, analyze_sentiment
 from prompts import GREETING
 
 # ---------- App setup ----------
 st.set_page_config(page_title="TalentScout – Hiring Assistant", layout="wide")
 st.title("🧭 TalentScout – AI Hiring Assistant")
+
+# Custom styling
+st.markdown("""
+<style>
+div.stButton > button {
+    background-color: #2563eb;
+    color: white;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-weight: bold;
+}
+div.stButton > button:hover {
+    background-color: #1e40af;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # greet + purpose
 with st.expander("What is this?", expanded=True):
@@ -48,7 +64,7 @@ if st.session_state.stage == "collect":
         )
         st.session_state.language = st.selectbox("Preferred Language", ["English", "Hindi", "Other"])
 
-    submitted = st.button("Save & Start Screening", use_container_width=True)
+    submitted = st.button("Save & Start Screening", width='stretch')
     if submitted:
         # validations
         if not full_name or not email or not phone or not years_exp or not desired_positions or not current_location or not tech_stack:
@@ -102,31 +118,26 @@ elif st.session_state.stage == "questions":
             st.session_state.questions = qs
 
     # Render questions
-    answers_col, info_col = st.columns([2, 1])
-    with answers_col:
-        for idx, q in enumerate(st.session_state.questions, start=1):
-            st.markdown(f"**Q{idx}. {q.question}**")
-            if q.kind == "MCQ" and q.options:
-                choice = st.radio("Choose one", q.options, key=f"mcq_{idx}")
-                if st.button(f"Save Answer Q{idx}", key=f"save_{idx}"):
-                    save_answer(cand.email, idx, q.question, choice)
-                    st.success("✅ Saved.")
-            else:
-                ans = st.text_area("Your answer", key=f"open_{idx}", height=120)
-                if st.button(f"Save Answer Q{idx}", key=f"save_{idx}"):
-                    save_answer(cand.email, idx, q.question, ans)
-                    st.success("✅ Saved.")
+    for idx, q in enumerate(st.session_state.questions, start=1):
+        st.markdown(f"**Q{idx}. {q.question}**")
+        st.progress(idx / len(st.session_state.questions))
 
-    with info_col:
-        st.subheader("ℹ️ Candidate")
-        st.write(f"**Name:** {cand.name}")
-        st.write(f"**Experience:** {cand.years_experience} years")
-        st.write(f"**Roles:** {', '.join(cand.desired_positions)}")
-        st.write(f"**Location:** {cand.current_location}")
-        st.write(f"**Stack:** {', '.join(cand.tech_stack)}")
-        st.write(f"**Lang:** {cand.language}")
+        if q.kind == "MCQ" and q.options:
+            choice = st.radio("Choose one", q.options, key=f"mcq_{idx}")
+            if st.button(f"Save Answer Q{idx}", key=f"save_{idx}"):
+                sentiment = analyze_sentiment(choice)
+                save_answer(cand.email, idx, q.question, choice, sentiment)
+                st.success(f"✅ Saved. (Sentiment: {sentiment})")
+                st.info(f"🤖 Bot: Thanks {cand.name}, I’ve recorded your answer.")
+        else:
+            ans = st.text_area("Your answer", key=f"open_{idx}", height=120)
+            if st.button(f"Save Answer Q{idx}", key=f"save_{idx}"):
+                sentiment = analyze_sentiment(ans)
+                save_answer(cand.email, idx, q.question, ans, sentiment)
+                st.success(f"✅ Saved. (Sentiment: {sentiment})")
+                st.info(f"🤖 Bot: Thanks {cand.name}, I’ve recorded your answer.")
 
-    if st.button("Finish Interview", type="primary", use_container_width=True):
+    if st.button("Finish Interview", type="primary", width='stretch'):
         st.session_state.stage = "done"
         st.rerun()
 
@@ -152,4 +163,4 @@ elif st.session_state.stage == "done":
     st.divider()
     st.subheader("📋 Candidate Records (Demo Only)")
     rows = list_candidates()
-    st.dataframe(rows, use_container_width=True)
+    st.dataframe(rows, width='stretch')
