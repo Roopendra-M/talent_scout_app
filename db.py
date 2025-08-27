@@ -10,6 +10,8 @@ def _connect():
 def init_db():
     conn = _connect()
     c = conn.cursor()
+    
+    # Ensure candidates table exists
     c.execute("""
         CREATE TABLE IF NOT EXISTS candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,6 +26,8 @@ def init_db():
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    
+    # Ensure answers table exists (without sentiment first)
     c.execute("""
         CREATE TABLE IF NOT EXISTS answers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,10 +35,16 @@ def init_db():
             q_number INTEGER,
             question TEXT,
             answer TEXT,
-            sentiment TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    
+    # Check if 'sentiment' column exists; if not, add it
+    c.execute("PRAGMA table_info(answers)")
+    columns = [row[1] for row in c.fetchall()]
+    if "sentiment" not in columns:
+        c.execute("ALTER TABLE answers ADD COLUMN sentiment TEXT DEFAULT 'Neutral'")
+    
     conn.commit()
     conn.close()
 
