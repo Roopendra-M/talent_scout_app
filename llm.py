@@ -11,13 +11,24 @@ HF_API_URL = "https://api-inference.huggingface.co/models/gpt2"
 HF_TOKEN = os.getenv("HF_TOKEN") or st.secrets.get("HUGGINGFACE_API_TOKEN", None)
 HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else {}
 
-FALLBACK_QUESTIONS = [
+# ---- Fallback Questions ----
+FALLBACK_QUESTIONS_EN = [
     QAItem(question="What is the difference between a list and a tuple in Python?", kind="Open"),
     QAItem(question="Explain how Docker helps in software deployment.", kind="Open"),
     QAItem(question="Which SQL command is used to remove duplicate rows?", kind="Open"),
     QAItem(question="You have experience with Pandas. How would you merge two DataFrames?", kind="Open"),
     QAItem(question="What are the benefits of using Git for version control?", kind="Open"),
 ]
+
+FALLBACK_QUESTIONS_HI = [
+    QAItem(question="Python में list और tuple में क्या अंतर है?", kind="Open"),
+    QAItem(question="Docker सॉफ्टवेयर डिप्लॉयमेंट में कैसे मदद करता है, समझाइए।", kind="Open"),
+    QAItem(question="SQL में duplicate rows को हटाने के लिए कौन सा command इस्तेमाल होता है?", kind="Open"),
+    QAItem(question="Pandas का उपयोग करते हुए आप दो DataFrames को कैसे merge करेंगे?", kind="Open"),
+    QAItem(question="Git का version control में उपयोग करने के क्या लाभ हैं?", kind="Open"),
+]
+
+EXIT_KEYWORDS = ["bye", "exit", "quit"]
 
 # ---- HuggingFace Call with Caching ----
 @functools.lru_cache(maxsize=128)
@@ -55,14 +66,15 @@ def analyze_sentiment(text: str) -> str:
 
 # ---- Translation Support ----
 def translate_text(text: str, target_lang: str) -> str:
-    if target_lang == "English":
+    if target_lang.lower() == "english":
         return text
     models = {
-        "Hindi": "Helsinki-NLP/opus-mt-en-hi",
-        "Other": "Helsinki-NLP/opus-mt-en-fr"  # fallback demo
+        "hindi": "Helsinki-NLP/opus-mt-en-hi",
+        "other": "Helsinki-NLP/opus-mt-en-fr"  # fallback demo
     }
-    model = models.get(target_lang)
-    if not model: return text
+    model = models.get(target_lang.lower())
+    if not model:
+        return text
     try:
         url = f"https://api-inference.huggingface.co/models/{model}"
         resp = requests.post(url, headers=HEADERS, json={"inputs": text}, timeout=20)
@@ -74,20 +86,27 @@ def translate_text(text: str, target_lang: str) -> str:
 
 # ---- Question Generation ----
 def generate_questions(techs, language="English", n_min=3, n_max=5):
-    n = random.randint(n_min, n_max)
-    prompt = f"Generate {n} {language} technical interview questions about: {', '.join(techs)}."
-    output = call_hf(prompt)
+    """
+    Generate technical interview questions based on tech stack and selected language.
+    Falls back to predefined questions if LLM/translation fails.
+    """
+    n = min(len(techs), random.randint(n_min, n_max))
     questions = []
+
+    # Try Hugging Face LLM if token is set
+    prompt = f"Generate {n} technical interview questions about: {', '.join(techs)}."
+    output = call_hf(prompt)
 
     if output:
         lines = [l.strip(" -1234567890.") for l in output.split("\n") if l.strip()]
-        for l in lines:
-            if len(questions) >= n:
-                break
+        for l in lines[:n]:
             translated = translate_text(l, language)
             questions.append(QAItem(question=translated, kind="Open"))
     else:
-        fallback = random.sample(FALLBACK_QUESTIONS, k=min(n, len(FALLBACK_QUESTIONS)))
-        questions = [QAItem(question=translate_text(q.question, language), kind=q.kind) for q in fallback]
+        # Fallback questions
+        fallback = FALLBACK_QUESTIONS_HI if language.lower() == "hindi" else FALLBACK_QUESTIONS_EN
+        fallback_sample = random.sample(fallback, k=min(n, len(fallback)))
+        for q in fallback_sample:
+            questions.append(QAItem(question=q.question, kind=q.kind))
 
     return questions
